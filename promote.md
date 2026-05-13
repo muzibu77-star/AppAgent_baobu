@@ -2,7 +2,7 @@
 
 # 登录GitHub仓库，将对应项目clone并push到自己的仓库中
 
-# 阅读architecture_prompt.md，创建对应memory-bank，在该目录下创建一个architecture.md ，用来解释项目中现有的整体框架
+# 我现在要做xxx（写明要做的事情），阅读architecture_prompt.md，创建对应memory-bank，在该目录下创建一个architecture.md ，用来解释项目中现有的整体框架
 
 # 生成计划
 plan模式：阅读plan文件的第一步，结合仓库结构，完善第一步的详细执行计划，要求每一步要小而具体。每一步都必须包含验证正确性的测试。严禁包含代码，只写清晰、具体的指令，并且尽可能直观、简短、稳健。（自己从0开始构建的项目:先聚焦于基础功能，完整功能后面再加。）
