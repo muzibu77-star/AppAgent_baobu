@@ -1,16 +1,38 @@
+import os
+from pathlib import Path
+
+
+def _load_local_credentials() -> None:
+    credentials_path = Path.home() / ".config" / "appagentx" / "credentials.env"
+    if not credentials_path.exists():
+        return
+
+    for raw_line in credentials_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_local_credentials()
+
 # LLM Configuration
 # These settings control the connection and behavior of the Large Language Model API
 # Please fill in your own API information below
 
-LLM_BASE_URL = ""
+LLM_BASE_URL = os.getenv("APPAGENTX_LLM_BASE_URL", "")
 # Base URL for the LLM API service, using a proxy to access OpenAI's API
 # Please enter your LLM service base URL here
 
-LLM_API_KEY = "sk-"
+LLM_API_KEY = os.getenv("APPAGENTX_LLM_API_KEY", "sk-")
 # API key for authentication with the LLM service
 # Please enter your LLM API key here
 
-LLM_MODEL = "gpt-4o"
+LLM_MODEL = os.getenv("APPAGENTX_LLM_MODEL", "gpt-4o")
 # Specific LLM model version to be used for inference
 # You can use OpenAI models like "gpt-4o" or DeepSeek models like "deepseek-chat"
 
@@ -44,11 +66,14 @@ LANGCHAIN_PROJECT = "xxx"
 # Settings for connecting to the Neo4j graph database
 # Please update these settings according to your Neo4j installation
 
-Neo4j_URI = "neo4j://127.0.0.1:7687"
+Neo4j_URI = os.getenv("APPAGENTX_NEO4J_URI", "neo4j://127.0.0.1:7687")
 # URI for connecting to the Neo4j database server
 # Default is localhost, change if your database is hosted elsewhere
 
-Neo4j_AUTH = ("neo4j", "12345678")
+Neo4j_AUTH = (
+    os.getenv("APPAGENTX_NEO4J_USERNAME", "neo4j"),
+    os.getenv("APPAGENTX_NEO4J_PASSWORD", "12345678"),
+)
 # Authentication credentials (username, password) for Neo4j
 # Please update with your actual Neo4j credentials
 
@@ -72,6 +97,6 @@ Omni_URI = "http://127.0.0.1:8000"
 # Settings for the vector database used for embeddings storage
 # Please fill in your vector database information
 
-PINECONE_API_KEY = "pcsk_"
+PINECONE_API_KEY = os.getenv("APPAGENTX_PINECONE_API_KEY", "pcsk_")
 # API key for authentication with Pinecone vector database service
 # Please enter your Pinecone API key here

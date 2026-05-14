@@ -374,3 +374,64 @@ cd AppAgentX && python demo.py
 4. 将真实 API key 从 `config.py` 移出，改为本地未提交配置或环境变量。
 5. 给自动探索加入最大步数、超时、失败分类和结构化日志，方便做可重复实验。
 6. 给链进化结果加入人工审核或离线评测，避免低质量高阶动作进入部署执行。
+
+## 17. 第 1 步环境准备后的文件作用补充
+
+- `.venv/`：仓库根目录虚拟环境，承载 AppAgentX 主依赖；该目录为本地运行产物，不提交。
+- `AppAgentX/requirements.txt`：主应用依赖入口，覆盖 Gradio、LangChain、LangGraph、Neo4j、Torch、Pillow 等运行依赖。
+- `AppAgentX/config.py`：配置模块；第 1 步只验证可导入，不写入 Key，也不连接外部服务。
+- `AppAgentX/data/State.py`：状态结构模块；第 1 步通过导入验证其语法和基础依赖可用。
+- `AppAgentX/tool/screen_content.py`：ADB 与屏幕工具模块；第 1 步只验证可导入，实际设备操作留到第 5 步。
+- `AppAgentX/backend/`：后端服务目录；第 1 步只确认目录和 Docker 环境，容器启动与服务接口验证留到第 4 步。
+- `memory-bank/plan.md`：复现步骤清单；当前已有第 1 至第 6 步的任务边界。
+- `memory-bank/results.md`：实验结果记录文件；第 1 步完成后记录环境验证结果。
+- `memory-bank/progress.md`：复现过程记录文件，用于给后续开发者说明已执行动作、验证结论和剩余阻塞项。
+
+## 18. 第 2 步凭据准备后的文件作用补充
+
+- `/home/tiger/.config/appagentx/credentials.env`：仓库外本地凭据文件，保存 LLM、Neo4j、Pinecone 的连接字段；不提交，不在文档中记录真实值。
+- `scripts/verify-step2-credentials.sh`：第 2 步验证脚本，只检查凭据文件路径、权限、字段完整性、基础格式和仓库外位置，不打印 Key、密码或完整 URI。
+- `AppAgentX/config.py`：仍未在第 2 步修改；第 3 步才会把已验证的本地凭据信息同步到运行配置。
+- `memory-bank/progress.md`：记录第 2 步已完成的验证结论，方便后续开发者知道凭据已准备但尚未写入 `config.py`。
+- `memory-bank/results.md`：记录第 2 步凭据准备结果，只保留验证状态，不记录敏感内容。
+
+## 19. 第 3 步配置后的架构补充
+
+- `AppAgentX/config.py`：配置入口已改为优先加载仓库外 `credentials.env`，再暴露原有字段名；调用方仍通过 `config.LLM_BASE_URL`、`config.Neo4j_URI`、`config.PINECONE_API_KEY` 等读取配置。
+- `/home/tiger/.config/appagentx/credentials.env`：本地真实配置来源；Neo4j Aura 需要使用 `neo4j+s://` 安全 URI 才能通过 driver 路由验证。
+- `AppAgentX/requirements.txt`：已补充 `pinecone`，与 `AppAgentX/data/vector_db.py` 中 `from pinecone import Pinecone, ServerlessSpec` 对齐。
+- `scripts/verify-step3-config.py`：第 3 步连通性验证脚本，按 LLM、Neo4j、Pinecone 分项检查并汇总失败；LLM 检查忽略环境代理，避免本地坏代理影响验证。
+- `AppAgentX/data/vector_db.py`：Pinecone 索引默认仍为 `area-embedding`，维度 `2048`，serverless 区域 `aws/us-east-1`。
+- `AppAgentX/data/graph_db.py`：Neo4j driver 使用 `config.Neo4j_URI` 和 `config.Neo4j_AUTH`，第 3 步只验证连接，不创建节点或写入数据。
+
+## 20. 第 4 步 backend 本地替代后的架构补充
+
+- `AppAgentX/backend/docker-compose.yml`：原计划入口，用于启动 `image-embedding` 和 `omni-parser`；当前容器环境缺少 Docker build/pull 所需权限，因此第 4 步未采用 Docker 路线。
+- `AppAgentX/backend/ImageEmbedding/image_embedding.py`：ImageEmbedding FastAPI 服务入口；本地监听 `8001`，验证接口包括模型列表、模型设置、模型信息和单图特征提取，输出特征维度为 `2048`。
+- `AppAgentX/backend/OmniParser/omni.py`：OmniParser FastAPI 服务入口；本地监听 `8000`，`POST /process_image/` 接收截图，调用 YOLO、OCR 和 Florence caption，返回元素 JSON、标注图和耗时。
+- `AppAgentX/backend/OmniParser/utils.py`：OmniParser 核心工具；第 4 步增加本地运行兼容逻辑，包括 OCR lazy 初始化、PaddleOCR 3.x 参数适配、PaddleOCR 失败降级为空 OCR、空 OCR 框结构统一。
+- `AppAgentX/backend/OmniParser/flash_attn/__init__.py`：本地占位模块，用于通过 Florence-2 动态代码的静态导入检查；由于没有真实包元数据，Transformers 仍不会启用 `flash_attn` 分支。
+- `AppAgentX/backend/OmniParser/requirements.txt`：OmniParser 后端依赖入口；第 4 步固定 Florence/Transformers 兼容版本，避免过新 Transformers 要求更高 PyTorch 版本。
+- `AppAgentX/backend/OmniParser/weights/`：OmniParser 本地权重目录；关键文件包括 `icon_detect_v1_5/best.pt` 和 `icon_caption_florence/model.safetensors`，该目录属于运行依赖和大文件产物，不应提交权重。
+- `scripts/verify-step4-backend.py`：第 4 步 backend 验证脚本；支持 Docker 服务为空时进入本地模式，检查 `8001`、`8000`、ImageEmbedding 特征提取和 OmniParser 图片解析。
+- `/tmp/appagentx-image-embedding.log`、`/tmp/appagentx-omni-parser.log`：本地 uvicorn 日志文件，用于排查启动和接口请求错误，不属于仓库产物。
+
+## 21. 第 5 步 ADB 与模拟器后的架构补充
+
+- `/home/tiger/android-sdk/`：本地 Android SDK 安装目录，提供 `platform-tools/adb`、`emulator/emulator`、`cmdline-tools/latest/bin/sdkmanager` 和 `avdmanager`；该目录在仓库外，不提交。
+- `appagentx_api36`：第 5 步创建的 Android 36 AVD；当前环境没有 `/dev/kvm`，需要用 `emulator -avd appagentx_api36 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off` 启动。
+- `emulator-5554`：第 5 步验证通过的 ADB 设备 ID；后续 Demo 或探索流程应使用 `adb devices` 的实际在线设备 ID，不假设该 ID 永远不变。
+- `scripts/verify-step5-adb.py`：第 5 步设备验证脚本；优先把 Android SDK 的 `platform-tools` 加入 `PATH`，再检查 ADB、设备状态、屏幕尺寸和项目截图工具。
+- `AppAgentX/tool/screen_content.py`：屏幕工具模块；`get_device_size` 已通过项目工具验证可读取 `1080x1920`，`take_screenshot` 已支持 `/sdcard` 失败后回退到 `/data/local/tmp`。
+- `log/step5_screenshots/`：第 5 步截图验证输出目录，属于运行产物；用于确认项目截图工具能从设备拉取 PNG，不应作为正式数据集提交。
+
+## 22. 第 6 步 Demo 验证后的架构补充
+
+- `AppAgentX/demo.py`：Gradio Demo 主入口；第 6 步验证了 `Initialization` 和 `User Exploration` 两个页签的最小链路。`start_session` / `stop_session` 已修正为与 9 个 Gradio outputs 对齐。
+- `AppAgentX/explor_human.py`：人工探索执行模块；`capture_and_parse_page` 能调用截图工具和 OmniParser，`single_human_explor` 能把人工动作写入 `history_steps`。
+- `AppAgentX/log/screenshots/`：Demo 人工探索截图、标注图和解析 JSON 的运行目录；用于页面可视化和后续状态 JSON 引用，不属于源码。
+- `AppAgentX/log/json_state/`：`Stop Session` 后的状态 JSON 输出目录；第 6 步最小验证以这里生成的新 JSON 作为轨迹采集成功标志。
+- `AppAgentX/data/data_storage.py`：状态导出模块；本步骤只使用 `state2json` 生成文件，未调用 `json2db` 入库。
+- `AppAgentX/backend/OmniParser/`：Demo 人工探索依赖 `8000/process_image/` 生成元素标注图和 JSON；backend 服务掉线会直接导致 `Start Session` 无法完成解析。
+- `AppAgentX/backend/ImageEmbedding/`：第 6 步前置健康检查仍验证 `8001`，但本步骤人工探索未执行入库和向量写入，因此不直接调用特征提取。
+- VS Code 端口转发 `7860`：用于在本地浏览器访问远程 Gradio Demo；这是运行环境配置，不是仓库文件。

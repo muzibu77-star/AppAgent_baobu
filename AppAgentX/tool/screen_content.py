@@ -113,22 +113,20 @@ def take_screenshot(
         filename = f"{app_name}_{timestamp}.png"
 
     screenshot_file = os.path.join(app_dir, filename)
-    remote_file = f"/sdcard/{filename}"
-
-    # Construct ADB commands
-    cap_command = f"adb -s {device} shell screencap -p {remote_file}"
-    pull_command = f"adb -s {device} pull {remote_file} {screenshot_file}"
-    delete_command = f"adb -s {device} shell rm {remote_file}"
+    remote_files = [f"/sdcard/{filename}", f"/data/local/tmp/{filename}"]
 
     sleep(3)
     # Execute screenshot command
     try:
-        if execute_adb(cap_command) != "ERROR":
-            if execute_adb(pull_command) != "ERROR":
-                execute_adb(
-                    delete_command
-                )  # Delete temporary screenshot file from device
-                return f"{screenshot_file}"
+        for remote_file in remote_files:
+            cap_command = f"adb -s {device} shell screencap -p {remote_file}"
+            pull_command = f"adb -s {device} pull {remote_file} {screenshot_file}"
+            delete_command = f"adb -s {device} shell rm {remote_file}"
+            if execute_adb(cap_command) != "ERROR":
+                if execute_adb(pull_command) != "ERROR":
+                    execute_adb(delete_command)
+                    return f"{screenshot_file}"
+                execute_adb(delete_command)
     except Exception as e:
         return f"Screenshot failed, error information: {str(e)}"
 

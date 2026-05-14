@@ -11,6 +11,7 @@ langchain
 langgraph
 langchain-openai
 openai
+pinecone
 transformers
 torch
 sentence-transformers

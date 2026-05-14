@@ -1,5 +1,10 @@
 # from ultralytics import YOLO
 import os
+
+os.environ.setdefault("FLAGS_enable_pir_api", "0")
+os.environ.setdefault("FLAGS_enable_pir_in_executor", "0")
+os.environ.setdefault("FLAGS_use_mkldnn", "0")
+
 import io
 import base64
 import time
@@ -18,17 +23,31 @@ import numpy as np
 # %matplotlib inline
 from matplotlib import pyplot as plt
 import easyocr
-from paddleocr import PaddleOCR
-reader = easyocr.Reader(['en'])
-paddle_ocr = PaddleOCR(
-    lang='en',  # other lang also available
-    use_angle_cls=False,
-    use_gpu=False,  # using cuda will conflict with pytorch in the same process
-    show_log=False,
-    max_batch_size=1024,
-    use_dilation=True,  # improves accuracy
-    det_db_score_mode='slow',  # improves accuracy
-    rec_batch_num=1024)
+
+reader = None
+paddle_ocr = None
+
+
+def get_easyocr_reader():
+    global reader
+    if reader is None:
+        reader = easyocr.Reader(['en'])
+    return reader
+
+
+def get_paddle_ocr():
+    global paddle_ocr
+    if paddle_ocr is None:
+        from paddleocr import PaddleOCR
+
+        paddle_ocr = PaddleOCR(
+            lang='en',
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            text_recognition_batch_size=1024,
+        )
+    return paddle_ocr
 import time
 import base64
 
@@ -302,7 +321,7 @@ def remove_overlap_new(boxes, iou_threshold, ocr_bbox=None):
                     filtered_boxes.append({'type': 'icon', 'bbox': box1_elem['bbox'], 'interactivity': True, 'content': None})
                             
             else:
-                filtered_boxes.append(box1)
+                filtered_boxes.append(box1_elem)
     return filtered_boxes # torch.tensor(filtered_boxes)
 
 
@@ -417,7 +436,7 @@ def get_som_labeled_img(img_path, model=None, BOX_TRESHOLD = 0.01, output_coord_
         ocr_bbox=ocr_bbox.tolist()
     else:
         print('no ocr bbox!!!')
-        ocr_bbox = None
+        ocr_bbox = []
     # filtered_boxes = remove_overlap(boxes=xyxy, iou_threshold=iou_threshold, ocr_bbox=ocr_bbox)
     # starting_idx = len(ocr_bbox)
     # print('len(filtered_boxes):', len(filtered_boxes), starting_idx)
@@ -493,20 +512,43 @@ def get_xywh_yolo(input):
     
 
 
+def _normalize_paddle_ocr_result(result, text_threshold):
+    if isinstance(result, dict) or hasattr(result, "keys"):
+        texts = list(result["rec_texts"])
+        scores = list(result["rec_scores"])
+        coords = result["rec_polys"] if len(result["rec_polys"]) else result["dt_polys"]
+        return (
+            [coord for coord, score in zip(coords, scores) if score > text_threshold],
+            [text for text, score in zip(texts, scores) if score > text_threshold],
+        )
+
+    return (
+        [item[0] for item in result if item[1][1] > text_threshold],
+        [item[1][0] for item in result if item[1][1] > text_threshold],
+    )
+
+
 def check_ocr_box(image_path, display_img = True, output_bb_format='xywh', goal_filtering=None, easyocr_args=None, use_paddleocr=False):
     if use_paddleocr:
         if easyocr_args is None:
             text_threshold = 0.5
         else:
             text_threshold = easyocr_args['text_threshold']
-        result = paddle_ocr.ocr(image_path, cls=False)[0]
-        conf = [item[1] for item in result]
-        coord = [item[0] for item in result if item[1][1] > text_threshold]
-        text = [item[1][0] for item in result if item[1][1] > text_threshold]
+        try:
+            result = get_paddle_ocr().predict(
+                image_path,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=False,
+            )[0]
+            coord, text = _normalize_paddle_ocr_result(result, text_threshold)
+        except Exception as exc:
+            print(f"PaddleOCR failed, continuing without OCR text boxes: {exc}", file=sys.stderr)
+            coord, text = [], []
     else:  # EasyOCR
         if easyocr_args is None:
             easyocr_args = {}
-        result = reader.readtext(image_path, **easyocr_args)
+        result = get_easyocr_reader().readtext(image_path, **easyocr_args)
         # print('goal filtering pred:', result[-5:])
         coord = [item[0] for item in result]
         text = [item[1] for item in result]
@@ -530,6 +572,3 @@ def check_ocr_box(image_path, display_img = True, output_bb_format='xywh', goal_
             bb = [get_xyxy(item) for item in coord]
         # print('bounding box!!!', bb)
     return (text, bb), goal_filtering
-
-
-
